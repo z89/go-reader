@@ -19,20 +19,14 @@ func timeTrack(start time.Time, name string) {
 	log.Printf("function: %s took %s\n", name, elapsed)
 }
 
-// took 335.096889ms to read a 2.9GB movie file
-
-func main() {
-	defer timeTrack(time.Now(), "main")
-
-	chunckSize := 5242880 // 5MiB chunks (in bytes)
-
-	fileName := "./test-movie.mp4"
-	file, err := os.Open(fileName)
+func byteReader(path string, chunkSize int) []byte {
+	defer timeTrack(time.Now(), "byteReader")
+	file, err := os.Open(path)
 	if err != nil {
 		panic(err)
 	}
 
-	fileInfo, err := os.Stat(fileName)
+	fileInfo, err := os.Stat(path)
 	if err != nil {
 		panic(err)
 	}
@@ -41,19 +35,14 @@ func main() {
 
 	reader := bufio.NewReader(file)
 
-	buffer := make([]byte, 0, chunckSize)          // 5MiB byte slice with 0 elements (initalise)
-	fullBuffer := make([]byte, 0, fileInfo.Size()) // 5MiB byte slice with 0 elements (initalise)
-
-	newFile, err := os.OpenFile("rewrite.mp4", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		panic(err)
-	}
+	temp := make([]byte, 0, chunkSize)         // 5MiB byte slice with 0 elements (initalise)
+	buffer := make([]byte, 0, fileInfo.Size()) // 5MiB byte slice with 0 elements (initalise)
 
 	for {
-		n, err := reader.Read(buffer[:cap(buffer)])
-		buffer = buffer[:n]
+		n, err := reader.Read(temp[:cap(temp)])
+		temp = temp[:n]
 
-		fullBuffer = append(fullBuffer, buffer...)
+		buffer = append(buffer, temp...)
 
 		if n == 0 {
 			if err == nil {
@@ -74,17 +63,37 @@ func main() {
 		}
 	}
 
+	return buffer
+}
+
+func byteWriter(path string, buffer []byte) {
+	defer timeTrack(time.Now(), "byteWriter")
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		panic(err)
+	}
+
 	fmt.Printf("writing buffer to file...\n")
-	if _, err = newFile.Write([]byte(fullBuffer)); err != nil {
+	if _, err = file.Write([]byte(buffer)); err != nil {
 		panic(err)
 	}
 
 	defer func() {
-		if err := newFile.Close(); err != nil {
+		if err := file.Close(); err != nil {
 			panic(err)
 		}
 	}()
+}
 
-	fmt.Printf("data len: %d bytes written to disk\n", len(fullBuffer))
+func main() {
+	fileName := "./data/test-movie.mp4"
 
+	// define chunks as 5MiB (5,242,880 in bytes)
+	chunckSize := 5242880
+
+	buff := byteReader(fileName, chunckSize)
+
+	byteWriter("./data/test.mp4", buff)
+
+	fmt.Printf("%d bytes written to disk\n", len(buff))
 }
